@@ -14,6 +14,7 @@ SERPAPI_URL = "https://serpapi.com/search.json"
 def _sahte():
     return {
         "sahte": True,
+        "durum": "Arama yapılmadı: SERPAPI_KEY ya da fotoğrafın internet adresi yok (sahte örnek gösteriliyor).",
         "birebir_bulundu": False,
         "benzer_sayisi": 14,
         "fiyat_min": 240.0,
@@ -29,7 +30,7 @@ def _sahte():
 
 def _bos(hata):
     return {
-        "sahte": False, "birebir_bulundu": False, "benzer_sayisi": None,
+        "sahte": False, "durum": hata, "birebir_bulundu": False, "benzer_sayisi": None,
         "fiyat_min": None, "fiyat_max": None, "ilgi": None, "ornekler": [], "hata": hata,
     }
 
@@ -62,8 +63,14 @@ def ara(foto_bytes, analiz, foto_url=None):
                 "fiyat": float(fiyat) if isinstance(fiyat, (int, float)) else None,
                 "link": e.get("link"),
             })
+    if eslesmeler:
+        durum = f"Google Lens arandı, {len(eslesmeler)} eşleşme geldi."
+    else:
+        durum = ("Google Lens arandı ama eşleşme gelmedi. Servisin cevabındaki başlıklar: "
+                 + ", ".join(sorted(veri.keys())))
     return {
         "sahte": False,
+        "durum": durum,
         "birebir_bulundu": False,  # görsel eşleşme birebir model kanıtı değildir
         "benzer_sayisi": len(eslesmeler) if eslesmeler else None,
         "fiyat_min": min(fiyatlar) if fiyatlar else None,

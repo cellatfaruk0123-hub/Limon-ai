@@ -75,7 +75,7 @@ function goster(d) {
   h += `<div class="kart"><h2>1) Karar</h2><div class="karar ${d.karar.renk}">${kac(d.karar.etiket)}</div><div>${kac(d.karar.gerekce)}</div></div>`;
   h += `<div class="kart"><h2>2) Satma ihtimali</h2><b>${kac(d.ihtimal.yuzde)}</b><div>${kac(d.ihtimal.gerekce)}</div></div>`;
   const b = d.benzerler;
-  h += `<div class="kart"><h2>3) İnternetteki benzerleri</h2>Bulunan: ${kac(b.adet)}<br>Fiyat aralığı: ${kac(b.fiyat_araligi)}<br>İlgi: ${kac(b.ilgi)}<ul>${b.ornekler.map(o=>`<li>${kac(o)}</li>`).join('')}</ul></div>`;
+  h += `<div class="kart"><h2>3) İnternetteki benzerleri</h2>Bulunan: ${kac(b.adet)}<br>Fiyat aralığı: ${kac(b.fiyat_araligi)}<br>İlgi: ${kac(b.ilgi)}<br><small>Arama durumu: ${kac(b.durum)}</small><ul>${b.ornekler.map(o=>`<li>${kac(o)}</li>`).join('')}</ul></div>`;
   const k = d.kar;
   h += `<div class="kart"><h2>4) Satış fiyatı ve kâr</h2><table>
     <tr><td>Satış fiyatı (KDV dahil)</td><td><b>${kac(k.satis)}</b></td></tr>

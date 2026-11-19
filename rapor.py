@@ -50,6 +50,9 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None):
     sahte = bool(analiz.get("sahte") or web.get("sahte"))
     if analiz.get("sahte") and web.get("sahte"):
         ust = "Bu örnek sonuçtur, gerçek analiz değildir."
+    elif analiz.get("sahte") and (web.get("hata") or not web.get("benzer_sayisi")):
+        ust = ("Dikkat: karar, satma ihtimali, beden-renk ve zamanlama hâlâ ÖRNEKTİR. "
+               "İnternet araması sonuç vermedi, kâr hesabı gerçektir.")
     elif analiz.get("sahte"):
         ust = ("Dikkat: karar, satma ihtimali, beden-renk ve zamanlama hâlâ ÖRNEKTİR. "
                "İnternetteki benzerler ve kâr hesabı gerçektir.")
@@ -72,6 +75,7 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None):
             "adet": web.get("benzer_sayisi") if web.get("benzer_sayisi") is not None else "bulamadım",
             "fiyat_araligi": fiyat,
             "ilgi": web.get("ilgi") or "bulamadım",
+            "durum": web.get("durum", ""),
             "ornekler": [
                 f"{o.get('site','bulamadım')} – {o.get('baslik','')} – "
                 + (_tl(o['fiyat']) if o.get('fiyat') is not None else "fiyat bulamadım")
