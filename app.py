@@ -1,11 +1,17 @@
+import os
+import uuid
+
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request
 
 load_dotenv()
 import rapor  # noqa: E402
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
+
+# Fotoğraf, arama servisinin erişebilmesi için yalnızca rapor sürerken bellekte tutulur.
+GECICI = {}
 
 
 @app.get("/")
@@ -20,6 +26,14 @@ def _sayi(deger):
         return None
 
 
+@app.get("/gecici/<kimlik>")
+def gecici(kimlik):
+    foto = GECICI.get(kimlik)
+    if not foto:
+        abort(404)
+    return Response(foto[0], mimetype=foto[1])
+
+
 @app.post("/rapor")
 def rapor_hazirla():
     foto = request.files.get("foto")
@@ -32,10 +46,18 @@ def rapor_hazirla():
         return jsonify(hata="Alış fiyatını yazın."), 400
     if adet is None or adet < 1:
         return jsonify(hata="Planlanan adedi yazın."), 400
-    sonuc = rapor.hazirla(
-        foto.read(), alis, request.form.get("kdv") == "dahil",
-        int(adet), request.form.get("kumas", "diğer"), satis if satis and satis > 0 else None,
-    )
+    veri = foto.read()
+    kimlik = uuid.uuid4().hex
+    GECICI[kimlik] = (veri, foto.mimetype or "image/jpeg")
+    taban = (os.getenv("RENDER_EXTERNAL_URL") or os.getenv("PUBLIC_URL") or request.url_root).rstrip("/")
+    try:
+        sonuc = rapor.hazirla(
+            veri, alis, request.form.get("kdv") == "dahil",
+            int(adet), request.form.get("kumas", "diğer"), satis if satis and satis > 0 else None,
+            foto_url=f"{taban}/gecici/{kimlik}",
+        )
+    finally:
+        GECICI.pop(kimlik, None)
     return jsonify(sonuc)
 
 

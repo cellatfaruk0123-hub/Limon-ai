@@ -31,14 +31,16 @@ def kar_hesapla(alis, kdv_dahil, adet, satis):
     }
 
 
-def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis):
+def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None):
     analiz = foto_analiz.analiz_et(foto_bytes)
-    web = resimle_ara.ara(foto_bytes, analiz)
+    web = resimle_ara.ara(foto_bytes, analiz, foto_url)
     kar = kar_hesapla(alis, kdv_dahil, adet, satis)
 
     uyarilar = []
     if not web.get("birebir_bulundu"):
         uyarilar.append("İnternette birebir aynı modeli bulamadım; aşağıdakiler yalnızca benzer ürünlerdir.")
+    if web.get("hata"):
+        uyarilar.append(web["hata"])
 
     if web.get("fiyat_min") is not None:
         fiyat = f"{_tl(web['fiyat_min'])} – {_tl(web['fiyat_max'])}"
@@ -46,8 +48,16 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis):
         fiyat = "bulamadım"
 
     sahte = bool(analiz.get("sahte") or web.get("sahte"))
+    if analiz.get("sahte") and web.get("sahte"):
+        ust = "Bu örnek sonuçtur, gerçek analiz değildir."
+    elif analiz.get("sahte"):
+        ust = ("Dikkat: karar, satma ihtimali, beden-renk ve zamanlama hâlâ ÖRNEKTİR. "
+               "İnternetteki benzerler ve kâr hesabı gerçektir.")
+    else:
+        ust = None
     return {
         "sahte": sahte,
+        "ust_uyari": ust,
         "uyarilar": uyarilar,
         "karar": {
             "etiket": "Az al",
@@ -62,7 +72,11 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis):
             "adet": web.get("benzer_sayisi") if web.get("benzer_sayisi") is not None else "bulamadım",
             "fiyat_araligi": fiyat,
             "ilgi": web.get("ilgi") or "bulamadım",
-            "ornekler": [f"{o['site']} – {_tl(o['fiyat'])}" for o in web.get("ornekler", [])],
+            "ornekler": [
+                f"{o.get('site','bulamadım')} – {o.get('baslik','')} – "
+                + (_tl(o['fiyat']) if o.get('fiyat') is not None else "fiyat bulamadım")
+                for o in web.get("ornekler", [])
+            ],
         },
         "kar": {
             "satis": _tl(kar["satis"]) + (" (program önerdi)" if kar["onerildi"] else ""),
