@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limon Çocuk – Ürün Testi</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;background:#fffbe6;color:#222}
+  main{max-width:560px;margin:0 auto;padding:16px}
+  h1{font-size:1.4rem;margin:.2em 0 .8em}
+  label{display:block;font-weight:600;margin:14px 0 4px}
+  input,select,button{width:100%;box-sizing:border-box;font-size:1.05rem;padding:12px;border:1px solid #bbb;border-radius:10px;background:#fff}
+  .sira{display:flex;gap:16px}.sira label{font-weight:400;display:flex;align-items:center;gap:6px;margin:0}
+  .sira input{width:auto}
+  button{background:#f5c800;border:0;font-weight:700;margin-top:20px}
+  #onizleme{max-width:100%;max-height:220px;margin-top:8px;border-radius:10px;display:none}
+  .uyari{background:#c62828;color:#fff;padding:12px;border-radius:10px;font-weight:700;margin:16px 0}
+  .bilgi{background:#fff3cd;border:1px solid #e0b800;padding:10px;border-radius:10px;margin:8px 0}
+  .kart{background:#fff;border-radius:12px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 3px #0002}
+  .kart h2{font-size:1.05rem;margin:0 0 6px}
+  .karar{font-size:1.4rem;font-weight:800}
+  .yesil{color:#2e7d32}.sari{color:#b8860b}.kirmizi{color:#c62828}
+  td{padding:2px 8px 2px 0;vertical-align:top}
+  #hata{color:#c62828;font-weight:600;margin-top:10px}
+</style>
+</head>
+<body><main>
+<h1>🍋 Limon Çocuk – Ürün Testi</h1>
+<form id="form">
+  <label>Takım fotoğrafı</label>
+  <input type="file" name="foto" id="foto" accept="image/*" capture="environment">
+  <img id="onizleme" alt="">
+  <label>Alış fiyatı (₺)</label>
+  <input type="number" name="alis" inputmode="decimal" step="0.01" min="0" required>
+  <div class="sira" style="margin-top:8px">
+    <label><input type="radio" name="kdv" value="dahil" checked> KDV dahil</label>
+    <label><input type="radio" name="kdv" value="haric"> KDV hariç</label>
+  </div>
+  <label>Planlanan adet</label>
+  <input type="number" name="adet" inputmode="numeric" min="1" required>
+  <label>Kumaş</label>
+  <select name="kumas">
+    <option>3 iplik şardonlu</option><option>3 iplik şardonsuz</option>
+    <option>2 iplik</option><option>diğer</option>
+  </select>
+  <label>Satış fiyatı (₺) – boşsa program önerir</label>
+  <input type="number" name="satis" inputmode="decimal" step="0.01" min="0">
+  <button type="submit">Rapor Hazırla</button>
+  <div id="hata"></div>
+</form>
+<div id="rapor"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const kac = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('#foto').onchange = e => {
+  const f = e.target.files[0], img = $('#onizleme');
+  if (f) { img.src = URL.createObjectURL(f); img.style.display = 'block'; }
+};
+$('#form').onsubmit = async e => {
+  e.preventDefault(); $('#hata').textContent = ''; $('#rapor').innerHTML = '';
+  const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Hazırlanıyor…';
+  try {
+    const r = await fetch('/rapor', {method:'POST', body:new FormData(e.target)});
+    const d = await r.json();
+    if (!r.ok) { $('#hata').textContent = d.hata || 'Bir sorun oldu.'; return; }
+    goster(d);
+  } catch { $('#hata').textContent = 'Bağlantı sorunu, tekrar deneyin.'; }
+  finally { btn.disabled = false; btn.textContent = 'Rapor Hazırla'; }
+};
+function goster(d) {
+  let h = '';
+  if (d.sahte) h += '<div class="uyari">Bu örnek sonuçtur, gerçek analiz değildir.</div>';
+  d.uyarilar.forEach(u => h += `<div class="bilgi">⚠️ ${kac(u)}</div>`);
+  h += `<div class="kart"><h2>1) Karar</h2><div class="karar ${d.karar.renk}">${kac(d.karar.etiket)}</div><div>${kac(d.karar.gerekce)}</div></div>`;
+  h += `<div class="kart"><h2>2) Satma ihtimali</h2><b>${kac(d.ihtimal.yuzde)}</b><div>${kac(d.ihtimal.gerekce)}</div></div>`;
+  const b = d.benzerler;
+  h += `<div class="kart"><h2>3) İnternetteki benzerleri</h2>Bulunan: ${kac(b.adet)}<br>Fiyat aralığı: ${kac(b.fiyat_araligi)}<br>İlgi: ${kac(b.ilgi)}<ul>${b.ornekler.map(o=>`<li>${kac(o)}</li>`).join('')}</ul></div>`;
+  const k = d.kar;
+  h += `<div class="kart"><h2>4) Satış fiyatı ve kâr</h2><table>
+    <tr><td>Satış fiyatı (KDV dahil)</td><td><b>${kac(k.satis)}</b></td></tr>
+    <tr><td>Alış (KDV hariç)</td><td>${kac(k.alis_hariç)}</td></tr>
+    <tr><td>Satıştaki KDV</td><td>${kac(k.odenecek_kdv)}</td></tr>
+    <tr><td>Adet başı kâr</td><td><b>${kac(k.adet_kar)}</b></td></tr>
+    <tr><td>Kâr oranı</td><td>${kac(k.kar_orani)}</td></tr>
+    <tr><td>Toplam yatırım</td><td>${kac(k.toplam_yatirim)}</td></tr>
+    <tr><td>Toplam kâr</td><td><b>${kac(k.toplam_kar)}</b></td></tr></table>
+    <small>${kac(k.not)}</small></div>`;
+  const br = d.beden_renk;
+  h += `<div class="kart"><h2>5) Beden ve renk önerisi</h2>${kac(br.bedenler)}<br>${kac(br.renkler)}<br>Kumaş: ${kac(br.kumas)}</div>`;
+  h += `<div class="kart"><h2>6) Zamanlama</h2>${kac(d.zamanlama)}</div>`;
+  $('#rapor').innerHTML = h;
+  $('#rapor').scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body></html>
