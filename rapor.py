@@ -1,4 +1,6 @@
-"""Raporu birleştirir. Kâr hesabı GERÇEK, diğer içerik şimdilik sahte."""
+"""Raporu birleştirir. Kâr hesabı her zaman gerçek; arama ve yorum anahtarlar varsa gerçek, yoksa sahte."""
+import datetime
+
 import foto_analiz
 import resimle_ara
 
@@ -31,56 +33,82 @@ def kar_hesapla(alis, kdv_dahil, adet, satis):
     }
 
 
+def _urun(o):
+    return {
+        "site": o.get("site") or "bulamadım",
+        "baslik": o.get("baslik") or "bulamadım",
+        "fiyat": _tl(o["fiyat"]) if o.get("fiyat") is not None else "fiyat bulamadım",
+        "yorum": o.get("yorum"),
+        "puan": o.get("puan"),
+        "link": o.get("link") if str(o.get("link", "")).startswith("http") else None,
+        "resim": o.get("resim") if str(o.get("resim", "")).startswith("http") else None,
+    }
+
+
+def _web_ozet(web):
+    if web.get("sahte") or not web.get("benzer_sayisi"):
+        return "Arama sonucu yok: bulamadım."
+    parca = [f"{web['benzer_sayisi']} benzer ürün bulundu"]
+    if web.get("fiyat_min") is not None:
+        parca.append(f"fiyatlar {web['fiyat_min']:.0f}-{web['fiyat_max']:.0f} TL, ortanca {web['fiyat_medyan']:.0f} TL")
+    ylar = [x["yorum"] for x in web.get("en_yorumlu", []) if x.get("yorum")]
+    parca.append(f"en çok yorum alan ürünün yorumu: {max(ylar)}" if ylar else "yorum sayısı: bulamadım")
+    return "; ".join(parca) + ". Satış sayısı: bulamadım."
+
+
 def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None):
-    analiz = foto_analiz.analiz_et(foto_bytes)
-    web = resimle_ara.ara(foto_bytes, analiz, foto_url)
     kar = kar_hesapla(alis, kdv_dahil, adet, satis)
+    web = resimle_ara.ara(foto_bytes, None, foto_url)
+    analiz = foto_analiz.analiz_et(foto_bytes, {
+        "alis_haric": kar["alis_hariç"], "adet": adet, "kumas": kumas, "satis": kar["satis"],
+        "kar_orani": kar["kar_orani"] or 0, "ay": datetime.date.today().month,
+        "web_ozet": _web_ozet(web),
+    })
 
     uyarilar = []
     if not web.get("birebir_bulundu"):
         uyarilar.append("İnternette birebir aynı modeli bulamadım; aşağıdakiler yalnızca benzer ürünlerdir.")
-    if web.get("hata"):
-        uyarilar.append(web["hata"])
+    for h in (web.get("hata"), analiz.get("hata")):
+        if h:
+            uyarilar.append(h)
 
     if web.get("fiyat_min") is not None:
-        fiyat = f"{_tl(web['fiyat_min'])} – {_tl(web['fiyat_max'])}"
+        fiyat = f"{_tl(web['fiyat_min'])} – {_tl(web['fiyat_max'])} (ortanca {_tl(web['fiyat_medyan'])})"
     else:
         fiyat = "bulamadım"
 
-    sahte = bool(analiz.get("sahte") or web.get("sahte"))
-    if analiz.get("sahte") and web.get("sahte"):
+    web_yok = bool(web.get("hata") or not web.get("benzer_sayisi"))
+    a_sahte, w_sahte = bool(analiz.get("sahte")), bool(web.get("sahte"))
+    if a_sahte and w_sahte:
         ust = "Bu örnek sonuçtur, gerçek analiz değildir."
-    elif analiz.get("sahte") and (web.get("hata") or not web.get("benzer_sayisi")):
-        ust = ("Dikkat: karar, satma ihtimali, beden-renk ve zamanlama hâlâ ÖRNEKTİR. "
+    elif a_sahte and web_yok:
+        ust = ("Dikkat: karar, satma ihtimali, beden-renk ve zamanlama ÖRNEKTİR. "
                "İnternet araması sonuç vermedi, kâr hesabı gerçektir.")
-    elif analiz.get("sahte"):
-        ust = ("Dikkat: karar, satma ihtimali, beden-renk ve zamanlama hâlâ ÖRNEKTİR. "
+    elif a_sahte:
+        ust = ("Dikkat: karar, satma ihtimali, beden-renk ve zamanlama ÖRNEKTİR. "
                "İnternetteki benzerler ve kâr hesabı gerçektir.")
+    elif w_sahte or web_yok:
+        ust = "Dikkat: internet araması sonuç vermedi. Karar yalnızca fotoğraf ve kâra dayanıyor."
     else:
         ust = None
+
+    etiket = analiz.get("karar", "bulamadım")
+    renk = {"Al": "yesil", "Az al": "sari", "Alma": "kirmizi"}.get(etiket, "sari")
     return {
-        "sahte": sahte,
+        "sahte": a_sahte or w_sahte,
         "ust_uyari": ust,
         "uyarilar": uyarilar,
-        "karar": {
-            "etiket": "Az al",
-            "renk": "sari",
-            "gerekce": "Örnek karar: benzer ürünler var, ilgi orta.",
-        },
-        "ihtimal": {
-            "yuzde": "%55 (örnek)" if sahte else "bulamadım",
-            "gerekce": "Örnek gerekçe: fiyat piyasa aralığında, ama birebir model bulunamadı.",
-        },
+        "karar": {"etiket": etiket, "renk": renk, "gerekce": analiz.get("karar_gerekce") or "bulamadım"},
+        "ihtimal": {"yuzde": analiz.get("ihtimal") or "bulamadım", "gerekce": analiz.get("ihtimal_gerekce") or "bulamadım"},
         "benzerler": {
             "adet": web.get("benzer_sayisi") if web.get("benzer_sayisi") is not None else "bulamadım",
             "fiyat_araligi": fiyat,
             "ilgi": web.get("ilgi") or "bulamadım",
             "durum": web.get("durum", ""),
-            "ornekler": [
-                f"{o.get('site','bulamadım')} – {o.get('baslik','')} – "
-                + (_tl(o['fiyat']) if o.get('fiyat') is not None else "fiyat bulamadım")
-                for o in web.get("ornekler", [])
-            ],
+            "urun": analiz.get("urun") or "bulamadım",
+            "arama_kelimeleri": analiz.get("arama_kelimeleri") or [],
+            "en_ucuz": [_urun(o) for o in web.get("en_ucuz", [])],
+            "en_yorumlu": [_urun(o) for o in web.get("en_yorumlu", [])],
         },
         "kar": {
             "satis": _tl(kar["satis"]) + (" (program önerdi)" if kar["onerildi"] else ""),
@@ -93,9 +121,9 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None):
             "not": "Gerçek hesap. Alış KDV'si indirilebilir sayıldı; komisyon, kargo ve kira dahil değil.",
         },
         "beden_renk": {
-            "bedenler": "Örnek: 2-3-4-5 yaş dağılımı eşit",
-            "renkler": "Örnek: " + ", ".join(analiz.get("renkler", [])) if analiz.get("renkler") else "bulamadım",
+            "bedenler": analiz.get("beden_oneri") or "bulamadım",
+            "renkler": analiz.get("renk_oneri") or "bulamadım",
             "kumas": kumas,
         },
-        "zamanlama": "Örnek: Sezon başına 3-4 hafta kala satışa çıkarın.",
+        "zamanlama": analiz.get("zamanlama") or "bulamadım",
     }

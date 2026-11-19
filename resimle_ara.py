@@ -21,10 +21,13 @@ def _sahte():
         "fiyat_min": 240.0,
         "fiyat_max": 420.0,
         "ilgi": "orta",
-        "ornekler": [
+        "fiyat_medyan": 329.0,
+        "en_ucuz": [
             {"site": "ornek-site-1.com", "baslik": "Örnek ürün", "fiyat": 249.9},
             {"site": "ornek-site-2.com", "baslik": "Örnek ürün", "fiyat": 329.0},
-            {"site": "ornek-site-3.com", "baslik": "Örnek ürün", "fiyat": 399.0},
+        ],
+        "en_yorumlu": [
+            {"site": "ornek-site-3.com", "baslik": "Örnek ürün", "fiyat": 399.0, "yorum": 120, "puan": 4.5},
         ],
     }
 
@@ -32,7 +35,7 @@ def _sahte():
 def _bos(hata):
     return {
         "sahte": False, "durum": hata, "birebir_bulundu": False, "benzer_sayisi": None,
-        "fiyat_min": None, "fiyat_max": None, "ilgi": None, "ornekler": [], "hata": hata,
+        "fiyat_min": None, "fiyat_max": None, "ilgi": None, "fiyat_medyan": None, "en_ucuz": [], "en_yorumlu": [], "hata": hata,
     }
 
 
@@ -72,18 +75,23 @@ def ara(foto_bytes, analiz, foto_url=None):
     if not eslesmeler and hatalar and not denenen:
         return _bos("Arama servisi hata verdi: " + " | ".join(hatalar))
 
-    ornekler, fiyatlar = [], []
+    liste = []
     for e in eslesmeler:
         fiyat = (e.get("price") or {}).get("extracted_value")
-        if isinstance(fiyat, (int, float)) and fiyat > 0:
-            fiyatlar.append(float(fiyat))
-        if len(ornekler) < 5:
-            ornekler.append({
-                "site": e.get("source") or "bulamadım",
-                "baslik": e.get("title") or "bulamadım",
-                "fiyat": float(fiyat) if isinstance(fiyat, (int, float)) else None,
-                "link": e.get("link"),
-            })
+        yorum = e.get("reviews")
+        puan = e.get("rating")
+        liste.append({
+            "site": e.get("source") or "bulamadım",
+            "baslik": e.get("title") or "bulamadım",
+            "fiyat": float(fiyat) if isinstance(fiyat, (int, float)) and fiyat > 0 else None,
+            "yorum": int(yorum) if isinstance(yorum, (int, float)) else None,
+            "puan": float(puan) if isinstance(puan, (int, float)) else None,
+            "link": e.get("link"),
+            "resim": e.get("thumbnail") or e.get("image"),
+        })
+    fiyatlar = sorted(x["fiyat"] for x in liste if x["fiyat"] is not None)
+    en_ucuz = sorted((x for x in liste if x["fiyat"] is not None), key=lambda x: x["fiyat"])[:5]
+    en_yorumlu = sorted((x for x in liste if x["yorum"]), key=lambda x: -x["yorum"])[:5]
     if eslesmeler:
         durum = f"Google Lens arandı ({denenen[-1]}), {len(eslesmeler)} eşleşme geldi."
     else:
@@ -95,8 +103,10 @@ def ara(foto_bytes, analiz, foto_url=None):
         "durum": durum,
         "birebir_bulundu": False,  # görsel eşleşme birebir model kanıtı değildir
         "benzer_sayisi": len(eslesmeler) if eslesmeler else None,
-        "fiyat_min": min(fiyatlar) if fiyatlar else None,
-        "fiyat_max": max(fiyatlar) if fiyatlar else None,
-        "ilgi": None,  # bu servis ilgi/satış verisi vermez
-        "ornekler": ornekler,
+        "fiyat_min": fiyatlar[0] if fiyatlar else None,
+        "fiyat_max": fiyatlar[-1] if fiyatlar else None,
+        "fiyat_medyan": fiyatlar[len(fiyatlar) // 2] if fiyatlar else None,
+        "ilgi": None,  # bu servis satış/ilgi verisi vermez; yorum sayısı varsa listede gösterilir
+        "en_ucuz": en_ucuz,
+        "en_yorumlu": en_yorumlu,
     }

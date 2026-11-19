@@ -22,6 +22,10 @@
   .yesil{color:#2e7d32}.sari{color:#b8860b}.kirmizi{color:#c62828}
   td{padding:2px 8px 2px 0;vertical-align:top}
   #hata{color:#c62828;font-weight:600;margin-top:10px}
+  small{color:#666}
+  h3{font-size:.95rem;margin:12px 0 4px}
+  .urun{display:flex;gap:10px;align-items:center;text-decoration:none;color:inherit;border:1px solid #ddd;border-radius:10px;padding:6px;margin:6px 0}
+  .kucuk{width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none;background:#eee}
 </style>
 </head>
 <body><main>
@@ -75,7 +79,16 @@ function goster(d) {
   h += `<div class="kart"><h2>1) Karar</h2><div class="karar ${d.karar.renk}">${kac(d.karar.etiket)}</div><div>${kac(d.karar.gerekce)}</div></div>`;
   h += `<div class="kart"><h2>2) Satma ihtimali</h2><b>${kac(d.ihtimal.yuzde)}</b><div>${kac(d.ihtimal.gerekce)}</div></div>`;
   const b = d.benzerler;
-  h += `<div class="kart"><h2>3) İnternetteki benzerleri</h2>Bulunan: ${kac(b.adet)}<br>Fiyat aralığı: ${kac(b.fiyat_araligi)}<br>İlgi: ${kac(b.ilgi)}<br><small>Arama durumu: ${kac(b.durum)}</small><ul>${b.ornekler.map(o=>`<li>${kac(o)}</li>`).join('')}</ul></div>`;
+  const urunKart = o => {
+    const ic = `${o.resim ? `<img class="kucuk" src="${kac(o.resim)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="kucuk"></div>'}
+      <div><b>${kac(o.fiyat)}</b><br>${kac(o.site)}<br><small>${kac(o.baslik)}${o.yorum ? ` · ${o.yorum} yorum` : ''}${o.puan ? ` · ${o.puan}★` : ''}</small></div>`;
+    return o.link ? `<a class="urun" href="${kac(o.link)}" target="_blank" rel="noopener">${ic}</a>` : `<div class="urun">${ic}</div>`;
+  };
+  const liste = (baslik, arr, bos) => `<h3>${baslik}</h3>` + (arr.length ? arr.map(urunKart).join('') : `<small>${bos}</small>`);
+  h += `<div class="kart"><h2>3) İnternetteki benzerleri</h2>Bulunan: ${kac(b.adet)}<br>Fiyat aralığı: ${kac(b.fiyat_araligi)}<br>İlgi (satış sayısı): ${kac(b.ilgi)}<br><small>Arama durumu: ${kac(b.durum)}</small>
+    <div style="margin-top:6px">Ürün: ${kac(b.urun)}</div>
+    ${liste('En ucuz 5', b.en_ucuz, 'Fiyatlı benzer ürün bulamadım.')}
+    ${liste('En çok yorum alan 5', b.en_yorumlu, 'Yorum bilgisi olan ürün bulamadım.')}</div>`;
   const k = d.kar;
   h += `<div class="kart"><h2>4) Satış fiyatı ve kâr</h2><table>
     <tr><td>Satış fiyatı (KDV dahil)</td><td><b>${kac(k.satis)}</b></td></tr>
