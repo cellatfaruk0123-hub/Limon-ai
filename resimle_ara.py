@@ -39,18 +39,28 @@ def ara(foto_bytes, analiz, foto_url=None):
     anahtar = os.getenv("SERPAPI_KEY")
     if not anahtar or not foto_url or "localhost" in foto_url or "127.0.0.1" in foto_url:
         return _sahte()
-    sorgu = urllib.parse.urlencode({
-        "engine": "google_lens", "url": foto_url, "hl": "tr", "country": "tr", "api_key": anahtar,
-    })
-    try:
+    def sorgula(tur):
+        sorgu = urllib.parse.urlencode({
+            "engine": "google_lens", "url": foto_url, "type": tur,
+            "hl": "tr", "country": "tr", "api_key": anahtar,
+        })
         with urllib.request.urlopen(f"{SERPAPI_URL}?{sorgu}", timeout=60) as r:
-            veri = json.load(r)
-    except Exception as e:  # ağ, anahtar, kota hataları
-        return _bos(f"Arama servisine ulaşılamadı ({type(e).__name__}).")
-    if veri.get("error"):
-        return _bos(f"Arama servisi hata verdi: {veri['error']}")
+            return json.load(r)
 
-    eslesmeler = veri.get("visual_matches") or []
+    eslesmeler, veri, denenen = [], {}, []
+    for tur in ("products", "visual_matches"):  # önce fiyatlı ürünler, olmazsa görsel eşleşmeler
+        try:
+            veri = sorgula(tur)
+        except Exception as e:  # ağ, anahtar, kota hataları
+            return _bos(f"Arama servisine ulaşılamadı ({type(e).__name__}).")
+        if veri.get("error"):
+            return _bos(f"Arama servisi hata verdi ({tur}): {veri['error']}")
+        eslesmeler = (veri.get("visual_matches") or veri.get("products")
+                      or veri.get("exact_matches") or [])
+        denenen.append(tur)
+        if eslesmeler:
+            break
+
     ornekler, fiyatlar = [], []
     for e in eslesmeler:
         fiyat = (e.get("price") or {}).get("extracted_value")
@@ -64,10 +74,10 @@ def ara(foto_bytes, analiz, foto_url=None):
                 "link": e.get("link"),
             })
     if eslesmeler:
-        durum = f"Google Lens arandı, {len(eslesmeler)} eşleşme geldi."
+        durum = f"Google Lens arandı ({denenen[-1]}), {len(eslesmeler)} eşleşme geldi."
     else:
-        durum = ("Google Lens arandı ama eşleşme gelmedi. Servisin cevabındaki başlıklar: "
-                 + ", ".join(sorted(veri.keys())))
+        durum = ("Google Lens arandı (" + ", ".join(denenen) + ") ama eşleşme gelmedi. "
+                 "Servisin cevabındaki başlıklar: " + ", ".join(sorted(veri.keys())))
     return {
         "sahte": False,
         "durum": durum,
