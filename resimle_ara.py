@@ -5,6 +5,7 @@ Bulamadığı bilgiyi None bırakır; rakam uydurmaz.
 """
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -44,22 +45,32 @@ def ara(foto_bytes, analiz, foto_url=None):
             "engine": "google_lens", "url": foto_url, "type": tur,
             "hl": "tr", "country": "tr", "api_key": anahtar,
         })
-        with urllib.request.urlopen(f"{SERPAPI_URL}?{sorgu}", timeout=60) as r:
-            return json.load(r)
+        try:
+            with urllib.request.urlopen(f"{SERPAPI_URL}?{sorgu}", timeout=60) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            try:
+                mesaj = json.load(e).get("error")
+            except Exception:
+                mesaj = None
+            return {"error": f"HTTP {e.code}" + (f": {mesaj}" if mesaj else "")}
 
-    eslesmeler, veri, denenen = [], {}, []
-    for tur in ("products", "visual_matches"):  # önce fiyatlı ürünler, olmazsa görsel eşleşmeler
+    eslesmeler, veri, denenen, hatalar = [], {}, [], []
+    for tur in ("visual_matches", "exact_matches"):  # Google'ın şu an desteklediği modlar
         try:
             veri = sorgula(tur)
-        except Exception as e:  # ağ, anahtar, kota hataları
-            return _bos(f"Arama servisine ulaşılamadı ({type(e).__name__}).")
+        except Exception as e:  # ağ hatası
+            hatalar.append(f"{tur}: {type(e).__name__}")
+            continue
         if veri.get("error"):
-            return _bos(f"Arama servisi hata verdi ({tur}): {veri['error']}")
-        eslesmeler = (veri.get("visual_matches") or veri.get("products")
-                      or veri.get("exact_matches") or [])
+            hatalar.append(f"{tur}: {veri['error']}")
+            continue
         denenen.append(tur)
+        eslesmeler = veri.get("visual_matches") or veri.get("exact_matches") or []
         if eslesmeler:
             break
+    if not eslesmeler and hatalar and not denenen:
+        return _bos("Arama servisi hata verdi: " + " | ".join(hatalar))
 
     ornekler, fiyatlar = [], []
     for e in eslesmeler:
@@ -77,7 +88,8 @@ def ara(foto_bytes, analiz, foto_url=None):
         durum = f"Google Lens arandı ({denenen[-1]}), {len(eslesmeler)} eşleşme geldi."
     else:
         durum = ("Google Lens arandı (" + ", ".join(denenen) + ") ama eşleşme gelmedi. "
-                 "Servisin cevabındaki başlıklar: " + ", ".join(sorted(veri.keys())))
+                 "Servisin cevabındaki başlıklar: " + ", ".join(sorted(veri.keys()))
+                 + (" | Hatalar: " + " | ".join(hatalar) if hatalar else ""))
     return {
         "sahte": False,
         "durum": durum,
