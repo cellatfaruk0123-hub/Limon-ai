@@ -37,6 +37,7 @@ def _istem(b):
 Ekteki fotoğraf toptancıda görülen bir çocuk takımı. Bilgiler:
 - Alış (KDV hariç): {b['alis_haric']:.2f} TL, planlanan adet: {b['adet']}
 - Kumaş (mağaza sahibi söyledi): {b['kumas']}
+- Üretici firma (etiketten, mağaza sahibi yazdı): {b.get('firma') or 'yazılmadı'}
 - Satış fiyatı (KDV dahil): {b['satis']:.2f} TL, adet başı kâr oranı: %{b['kar_orani']:.0f}
 - Şu an ay numarası: {b['ay']}
 - İnternet (Google Lens) özeti: {b['web_ozet']}
@@ -47,7 +48,7 @@ Beden ve renk önerisini genel çocuk giyim bilgisine dayalı öneri olarak beli
 
 Yalnızca şu JSON'u döndür:
 {{"urun": "takımın kısa tanımı", "renkler": ["görünen renkler"],
- "arama_kelimeleri": ["3 kısa Türkçe arama cümlesi"],
+ "arama_kelimeleri": ["3 kısa Türkçe arama cümlesi; üretici firma yazıldıysa her cümlede firma adı geçsin"],
  "karar": "Al" | "Az al" | "Alma", "karar_gerekce": "1-2 cümle",
  "ihtimal": "düşük" | "orta" | "yüksek", "ihtimal_gerekce": "1-2 cümle",
  "beden_oneri": "yaş/beden dağılımı", "renk_oneri": "renk dağılımı",
