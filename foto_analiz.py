@@ -89,3 +89,36 @@ def analiz_et(foto_bytes, baglam=None):
         except Exception as e:
             hatalar.append(f"{model}: {type(e).__name__}")
     return _sahte("Fotoğraf yorumu alınamadı (" + " | ".join(hatalar) + ").")
+
+
+def etiket_oku(foto_bytes):
+    """Fotoğraftaki etiket/yazıdan marka ve model kodunu okur. Okuyamazsa boş döner; uydurmaz."""
+    anahtar = os.getenv("GEMINI_API_KEY")
+    if not anahtar:
+        return {}
+    istem = ("Fotoğraftaki etiket, askı, katalog yazısı veya logoda GÖRÜNEN marka adını ve model/ürün kodunu oku. "
+             "Görmediğini yazma, tahmin etme, boş bırak. Yalnızca şu JSON'u döndür: "
+             '{"marka": "", "model_kodu": ""}')
+    govde = json.dumps({
+        "contents": [{"parts": [
+            {"text": istem},
+            {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(foto_bytes).decode()}},
+        ]}],
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
+    }).encode()
+    modeller = ([os.getenv("GEMINI_MODEL")] if os.getenv("GEMINI_MODEL") else []) + MODELLER
+    for model in modeller:
+        istek = urllib.request.Request(
+            ADRES.format(model=model), data=govde, method="POST",
+            headers={"Content-Type": "application/json", "x-goog-api-key": anahtar})
+        try:
+            with urllib.request.urlopen(istek, timeout=60) as r:
+                veri = json.load(r)
+            o = json.loads(veri["candidates"][0]["content"]["parts"][0]["text"])
+            return {"marka": str(o.get("marka") or "").strip()[:40], "model_kodu": str(o.get("model_kodu") or "").strip()[:30]}
+        except urllib.error.HTTPError as e:
+            if e.code not in (400, 404):
+                break
+        except Exception:
+            continue
+    return {}

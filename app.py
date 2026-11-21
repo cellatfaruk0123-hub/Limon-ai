@@ -57,6 +57,7 @@ def rapor_hazirla():
             foto_url=f"{taban}/gecici/{kimlik}",
             firma=(request.form.get("firma") or "").strip()[:60],
             kategori=(request.form.get("kategori") or "").strip()[:40],
+            model_kodu=(request.form.get("model") or "").strip()[:30],
         )
     finally:
         GECICI.pop(kimlik, None)

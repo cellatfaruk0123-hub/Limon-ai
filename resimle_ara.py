@@ -39,11 +39,11 @@ def _bos(hata):
     }
 
 
-def ara(foto_bytes, analiz, foto_url=None, firma="", kategori=""):
+def ara(foto_bytes, analiz, foto_url=None, firma="", kategori="", model=""):
     anahtar = os.getenv("SERPAPI_KEY")
     if not anahtar or not foto_url or "localhost" in foto_url or "127.0.0.1" in foto_url:
         return _sahte()
-    metin = " ".join(x for x in (firma, kategori if kategori != "diğer" else "") if x).strip()
+    metin = " ".join(x for x in (firma, model, kategori if kategori != "diğer" else "") if x).strip()
 
     def sorgula(tur, firma_ile=True):
         parametre = {
@@ -117,3 +117,23 @@ def ara(foto_bytes, analiz, foto_url=None, firma="", kategori=""):
         "en_ucuz": en_ucuz,
         "en_yorumlu": en_yorumlu,
     }
+
+
+def yazi_ara(sorgu):
+    """Marka + model kodunu Google'da yazıyla arar (SerpApi). Anahtar ya da sorgu yoksa boş liste döner."""
+    anahtar = os.getenv("SERPAPI_KEY")
+    if not anahtar or not sorgu.strip():
+        return []
+    q = urllib.parse.urlencode({"engine": "google", "q": sorgu, "hl": "tr", "gl": "tr", "num": 8, "api_key": anahtar})
+    try:
+        with urllib.request.urlopen(f"{SERPAPI_URL}?{q}", timeout=60) as r:
+            veri = json.load(r)
+    except Exception:
+        return []
+    cikti = []
+    for o in (veri.get("organic_results") or [])[:6]:
+        link = o.get("link")
+        if isinstance(link, str) and link.startswith("http"):
+            cikti.append({"baslik": o.get("title") or "bulamadım", "site": o.get("source") or o.get("displayed_link") or "",
+                          "link": link, "ozet": o.get("snippet") or ""})
+    return cikti

@@ -43,6 +43,8 @@
   </select>
   <label>Üretici firma – etiketteki isim (varsa)</label>
   <input type="text" name="firma" placeholder="örn: İnotex" autocomplete="off">
+  <label>Model kodu (varsa, örn: 1863)</label>
+  <input type="text" name="model" placeholder="boşsa fotoğraftan okunur" autocomplete="off">
   <label>Alış fiyatı (₺)</label>
   <input type="number" name="alis" inputmode="decimal" step="0.01" min="0" required>
   <div class="sira" style="margin-top:8px">
@@ -96,6 +98,8 @@ function goster(d) {
   const liste = (baslik, arr, bos) => `<h3>${baslik}</h3>` + (arr.length ? arr.map(urunKart).join('') : `<small>${bos}</small>`);
   h += `<div class="kart"><h2>3) İnternetteki benzerleri</h2>Bulunan: ${kac(b.adet)}<br>Fiyat aralığı: ${kac(b.fiyat_araligi)}<br>İlgi (satış sayısı): ${kac(b.ilgi)}<br><small>Arama durumu: ${kac(b.durum)}</small>
     <div style="margin-top:6px">Ürün: ${kac(b.urun)}</div>
+    <div style="margin-top:6px">Aranan marka/model: <b>${kac([b.okunan.marka, b.okunan.model_kodu].filter(Boolean).join(' ') || 'bulamadım')}</b>${b.okunan.yazidan ? ' <small>(fotoğraftan okundu)</small>' : ''}</div>
+    ${b.yazi_sonuc && b.yazi_sonuc.length ? `<h3>Yazıyla arama: ${kac(b.yazi_sorgu)}</h3>` + b.yazi_sonuc.map(o => `<a class="urun" href="${kac(o.link)}" target="_blank" rel="noopener"><div><b>${kac(o.baslik)}</b><br><small>${kac(o.site)} ${kac(o.ozet)}</small></div></a>`).join('') : ''}
     ${liste('En ucuz 5', b.en_ucuz, 'Fiyatlı benzer ürün bulamadım.')}
     ${liste('En çok yorum alan 5', b.en_yorumlu, 'Yorum bilgisi olan ürün bulamadım.')}</div>`;
   const k = d.kar;

@@ -56,13 +56,20 @@ def _web_ozet(web):
     return "; ".join(parca) + ". Satış sayısı: bulamadım."
 
 
-def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firma="", kategori=""):
+def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firma="", kategori="", model_kodu=""):
     kar = kar_hesapla(alis, kdv_dahil, adet, satis)
-    web = resimle_ara.ara(foto_bytes, None, foto_url, firma, kategori)
+    okunan = {}
+    if not (firma and model_kodu):  # eksik olanı etiketten oku
+        okunan = foto_analiz.etiket_oku(foto_bytes)
+    firma_son = firma or okunan.get("marka", "")
+    model_son = model_kodu or okunan.get("model_kodu", "")
+    web = resimle_ara.ara(foto_bytes, None, foto_url, firma_son, kategori, model_son)
+    yazi_sorgu = " ".join(x for x in (firma_son, model_son, kategori if kategori != "diğer" else "") if x)
+    yazi = resimle_ara.yazi_ara(yazi_sorgu) if (firma_son or model_son) else []
     analiz = foto_analiz.analiz_et(foto_bytes, {
         "alis_haric": kar["alis_hariç"], "adet": adet, "kumas": kumas, "satis": kar["satis"],
         "kar_orani": kar["kar_orani"] or 0, "ay": datetime.date.today().month,
-        "web_ozet": _web_ozet(web), "firma": firma, "kategori": kategori,
+        "web_ozet": _web_ozet(web), "firma": firma_son, "kategori": kategori,
     })
 
     uyarilar = []
@@ -107,6 +114,9 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
             "durum": web.get("durum", ""),
             "urun": analiz.get("urun") or "bulamadım",
             "arama_kelimeleri": analiz.get("arama_kelimeleri") or [],
+            "okunan": {"marka": firma_son, "model_kodu": model_son, "yazidan": bool(okunan.get("marka") or okunan.get("model_kodu"))},
+            "yazi_sorgu": yazi_sorgu,
+            "yazi_sonuc": yazi,
             "en_ucuz": [_urun(o) for o in web.get("en_ucuz", [])],
             "en_yorumlu": [_urun(o) for o in web.get("en_yorumlu", [])],
         },
