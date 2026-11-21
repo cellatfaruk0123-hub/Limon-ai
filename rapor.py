@@ -56,13 +56,13 @@ def _web_ozet(web):
     return "; ".join(parca) + ". Satış sayısı: bulamadım."
 
 
-def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firma=""):
+def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firma="", kategori=""):
     kar = kar_hesapla(alis, kdv_dahil, adet, satis)
-    web = resimle_ara.ara(foto_bytes, None, foto_url, firma)
+    web = resimle_ara.ara(foto_bytes, None, foto_url, firma, kategori)
     analiz = foto_analiz.analiz_et(foto_bytes, {
         "alis_haric": kar["alis_hariç"], "adet": adet, "kumas": kumas, "satis": kar["satis"],
         "kar_orani": kar["kar_orani"] or 0, "ay": datetime.date.today().month,
-        "web_ozet": _web_ozet(web), "firma": firma,
+        "web_ozet": _web_ozet(web), "firma": firma, "kategori": kategori,
     })
 
     uyarilar = []

@@ -56,6 +56,7 @@ def rapor_hazirla():
             int(adet), request.form.get("kumas", "diğer"), satis if satis and satis > 0 else None,
             foto_url=f"{taban}/gecici/{kimlik}",
             firma=(request.form.get("firma") or "").strip()[:60],
+            kategori=(request.form.get("kategori") or "").strip()[:40],
         )
     finally:
         GECICI.pop(kimlik, None)

@@ -39,17 +39,19 @@ def _bos(hata):
     }
 
 
-def ara(foto_bytes, analiz, foto_url=None, firma=""):
+def ara(foto_bytes, analiz, foto_url=None, firma="", kategori=""):
     anahtar = os.getenv("SERPAPI_KEY")
     if not anahtar or not foto_url or "localhost" in foto_url or "127.0.0.1" in foto_url:
         return _sahte()
+    metin = " ".join(x for x in (firma, kategori if kategori != "diğer" else "") if x).strip()
+
     def sorgula(tur, firma_ile=True):
         parametre = {
             "engine": "google_lens", "url": foto_url, "type": tur,
             "hl": "tr", "country": "tr", "api_key": anahtar,
         }
-        if firma and firma_ile:
-            parametre["q"] = firma  # etiketteki üretici adı: Lens aramasını daraltır
+        if metin and firma_ile:
+            parametre["q"] = metin  # firma + kategori: Lens aramasını doğru ürüne yönlendirir
         sorgu = urllib.parse.urlencode(parametre)
         try:
             with urllib.request.urlopen(f"{SERPAPI_URL}?{sorgu}", timeout=60) as r:
@@ -65,8 +67,8 @@ def ara(foto_bytes, analiz, foto_url=None, firma=""):
     for tur in ("visual_matches", "exact_matches"):  # Google'ın şu an desteklediği modlar
         try:
             veri = sorgula(tur)
-            if firma and veri.get("error"):  # firma adı bu modda hata verdiyse yalnızca fotoğrafla dene
-                veri = sorgula(tur, firma_ile=False)
+            if metin and (veri.get("error") or not (veri.get("visual_matches") or veri.get("exact_matches"))):
+                veri = sorgula(tur, firma_ile=False)  # yazıyla sonuç gelmediyse yalnızca fotoğrafla dene
         except Exception as e:  # ağ hatası
             hatalar.append(f"{tur}: {type(e).__name__}")
             continue
