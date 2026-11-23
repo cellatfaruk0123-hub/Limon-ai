@@ -25,10 +25,23 @@
   small{color:#666}
   h3{font-size:.95rem;margin:12px 0 4px}
   .urun{display:flex;gap:10px;align-items:center;text-decoration:none;color:inherit;border:1px solid #ddd;border-radius:10px;padding:6px;margin:6px 0}
+  .dugmeler{display:flex;gap:8px;margin:10px 0}
+  .dugme{flex:1;text-align:center;padding:12px;border-radius:10px;font-weight:700;text-decoration:none;color:#222;background:#f5c800}
+  .dugme.g{background:#e8eefc}
+  #kilit{position:fixed;inset:0;background:#fffbe6;display:none;align-items:center;justify-content:center;z-index:9}
+  #kilit div{width:90%;max-width:360px}
   .kucuk{width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none;background:#eee}
 </style>
 </head>
-<body><main>
+<body>
+<div id="kilit"><div>
+  <h1>🍋 Limon Çocuk – Ürün Testi</h1>
+  <label>Şifre</label>
+  <input type="password" id="pin" inputmode="numeric" autocomplete="current-password">
+  <button type="button" id="pinGir">Giriş</button>
+  <div id="pinHata" style="color:#c62828;font-weight:600;margin-top:10px"></div>
+</div></div>
+<main>
 <h1>🍋 Limon Çocuk – Ürün Testi</h1>
 <form id="form">
   <label>Takım fotoğrafı</label>
@@ -40,6 +53,11 @@
     <option>kız çocuk elbise</option><option>mont / kaban</option>
     <option>tişört / sweatshirt</option><option>pantolon / eşofman</option>
     <option>pijama takımı</option><option>ayakkabı</option><option>diğer</option>
+  </select>
+  <label>Seri / Yaş aralığı</label>
+  <select name="seri">
+    <option>1-4 yaş</option><option>5-8 yaş</option><option>9-12 yaş</option>
+    <option>10-15 yaş</option><option>diğer</option>
   </select>
   <label>Üretici firma – etiketteki isim (varsa)</label>
   <input type="text" name="firma" placeholder="örn: İnotex" autocomplete="off">
@@ -67,6 +85,35 @@
 </main>
 <script>
 const $ = s => document.querySelector(s);
+const PIN_GEREKLI = {{ 'true' if pin_gerekli else 'false' }};
+const pinAl = () => { try { return localStorage.getItem('limon_pin') || ''; } catch { return ''; } };
+const pinYaz = p => { try { p ? localStorage.setItem('limon_pin', p) : localStorage.removeItem('limon_pin'); } catch {} };
+const kilitAc = () => { $('#kilit').style.display = 'flex'; $('#pin').value = ''; $('#pin').focus(); };
+if (PIN_GEREKLI && !pinAl()) kilitAc();
+$('#pinGir').onclick = async () => {
+  const p = $('#pin').value.trim(); $('#pinHata').textContent = '';
+  if (!p) return;
+  try {
+    const r = await fetch('/pin', {method:'POST', headers:{'X-App-Pin': p}});
+    if (r.ok) { pinYaz(p); $('#kilit').style.display = 'none'; }
+    else $('#pinHata').textContent = 'Şifre yanlış.';
+  } catch { $('#pinHata').textContent = 'Bağlantı sorunu, tekrar deneyin.'; }
+};
+$('#pin').onkeydown = e => { if (e.key === 'Enter') $('#pinGir').click(); };
+// Fotoğrafı göndermeden önce en fazla 1024 px genişliğe küçültüp JPEG (0.8) yapar. Olmazsa aslını gönderir.
+async function kucult(dosya) {
+  try {
+    const url = URL.createObjectURL(dosya);
+    const img = await new Promise((ok, red) => { const i = new Image(); i.onload = () => ok(i); i.onerror = red; i.src = url; });
+    const oran = Math.min(1, 1024 / img.naturalWidth);
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * oran); c.height = Math.round(img.naturalHeight * oran);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.8));
+    return blob || dosya;
+  } catch { return dosya; }
+}
 const kac = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 $('#foto').onchange = e => {
   const f = e.target.files[0], img = $('#onizleme');
@@ -76,8 +123,12 @@ $('#form').onsubmit = async e => {
   e.preventDefault(); $('#hata').textContent = ''; $('#rapor').innerHTML = '';
   const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Hazırlanıyor…';
   try {
-    const r = await fetch('/rapor', {method:'POST', body:new FormData(e.target)});
+    const fd = new FormData(e.target);
+    const dosya = $('#foto').files[0];
+    if (dosya) fd.set('foto', await kucult(dosya), 'foto.jpg');
+    const r = await fetch('/rapor', {method:'POST', body:fd, headers:{'X-App-Pin': pinAl()}});
     const d = await r.json();
+    if (r.status === 401) { pinYaz(''); kilitAc(); $('#hata').textContent = d.hata || 'Şifre gerekli.'; return; }
     if (!r.ok) { $('#hata').textContent = d.hata || 'Bir sorun oldu.'; return; }
     goster(d);
   } catch { $('#hata').textContent = 'Bağlantı sorunu, tekrar deneyin.'; }
@@ -99,7 +150,8 @@ function goster(d) {
   h += `<div class="kart"><h2>3) İnternetteki benzerleri</h2>Bulunan: ${kac(b.adet)}<br>Fiyat aralığı: ${kac(b.fiyat_araligi)}<br>İlgi (satış sayısı): ${kac(b.ilgi)}<br><small>Arama durumu: ${kac(b.durum)}</small>
     <div style="margin-top:6px">Ürün: ${kac(b.urun)}</div>
     <div style="margin-top:6px">Aranan marka/model: <b>${kac([b.okunan.marka, b.okunan.model_kodu].filter(Boolean).join(' ') || 'bulamadım')}</b>${b.okunan.yazidan ? ' <small>(fotoğraftan okundu)</small>' : ''}</div>
-    ${b.yazi_sonuc && b.yazi_sonuc.length ? `<h3>Yazıyla arama: ${kac(b.yazi_sorgu)}</h3>` + b.yazi_sonuc.map(o => `<a class="urun" href="${kac(o.link)}" target="_blank" rel="noopener"><div><b>${kac(o.baslik)}</b><br><small>${kac(o.site)} ${kac(o.ozet)}</small></div></a>`).join('') : ''}
+    <div class="dugmeler"><a class="dugme" href="${kac(b.dugmeler.trendyol)}" target="_blank" rel="noopener">Trendyol'da Ara</a><a class="dugme g" href="${kac(b.dugmeler.google)}" target="_blank" rel="noopener">Google Alışveriş'te Ara</a></div>
+    <small>Aranacak: ${kac(b.dugmeler.sorgu)}</small>
     ${liste('En ucuz 5', b.en_ucuz, 'Fiyatlı benzer ürün bulamadım.')}
     ${liste('En çok yorum alan 5', b.en_yorumlu, 'Yorum bilgisi olan ürün bulamadım.')}</div>`;
   const k = d.kar;
@@ -107,10 +159,14 @@ function goster(d) {
     <tr><td>Satış fiyatı (KDV dahil)</td><td><b>${kac(k.satis)}</b></td></tr>
     <tr><td>Alış (KDV hariç)</td><td>${kac(k.alis_hariç)}</td></tr>
     <tr><td>Satıştaki KDV</td><td>${kac(k.odenecek_kdv)}</td></tr>
+    <tr><td>Net ödenecek KDV, adet başı (satış KDV − alış KDV)</td><td>${kac(k.net_kdv)}</td></tr>
     <tr><td>Adet başı kâr</td><td><b>${kac(k.adet_kar)}</b></td></tr>
     <tr><td>Kâr oranı</td><td>${kac(k.kar_orani)}</td></tr>
-    <tr><td>Toplam yatırım</td><td>${kac(k.toplam_yatirim)}</td></tr>
+    <tr><td>Toplam yatırım (KDV hariç)</td><td>${kac(k.toplam_yatirim)}</td></tr>
+    <tr><td>Toptancıya çıkacak nakit (KDV dahil)</td><td><b>${kac(k.toptanci_nakit)}</b></td></tr>
     <tr><td>Toplam kâr</td><td><b>${kac(k.toplam_kar)}</b></td></tr></table>
+    <div class="bilgi">${kac(k.piyasa)}</div>
+    <div class="bilgi">${kac(k.trendyol)}</div>
     <small>${kac(k.not)}</small></div>`;
   const br = d.beden_renk;
   h += `<div class="kart"><h2>5) Beden ve renk önerisi</h2>${kac(br.bedenler)}<br>${kac(br.renkler)}<br>Kumaş: ${kac(br.kumas)}</div>`;

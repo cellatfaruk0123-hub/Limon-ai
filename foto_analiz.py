@@ -9,7 +9,8 @@ import os
 import urllib.error
 import urllib.request
 
-MODELLER = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash-latest"]
+MODELLER = ["gemini-2.5-flash", "gemini-flash-latest"]
+ZAMAN_ASIMI = 20  # saniye
 ADRES = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
@@ -40,12 +41,14 @@ Ekteki fotoğraf toptancıda görülen bir çocuk takımı. Bilgiler:
 - Ürün kategorisi (mağaza sahibi seçti, bunu esas al): {b.get('kategori') or 'seçilmedi'}
 - Üretici firma (etiketten, mağaza sahibi yazdı): {b.get('firma') or 'yazılmadı'}
 - Satış fiyatı (KDV dahil): {b['satis']:.2f} TL, adet başı kâr oranı: %{b['kar_orani']:.0f}
+- Seri / yaş aralığı: {b.get('seri') or 'seçilmedi'}
 - Şu an ay numarası: {b['ay']}
+- Gaziantep bilgisi: havalar geç soğur, kış kısa sürer; ağır kışlık ürünün satış penceresi dardır. Bayram öncesi ve okul açılış dönemleri en yoğun satış zamanlarıdır.
 - İnternet (Google Lens) özeti: {b['web_ozet']}
 
 KESİN KURALLAR: Verilmeyen hiçbir rakamı uydurma. İnternet özetinde olmayan satış sayısı, ilgi ya da fiyat için "bulamadım" yaz.
 Karar; fotoğraf, kumaş, mevsim, kâr oranı ve internet özetine dayansın, gerekçede hangisine dayandığını söyle.
-Beden ve renk önerisini genel çocuk giyim bilgisine dayalı öneri olarak belirt.
+Beden ve renk önerisini seçilen yaş serisine ve genel çocuk giyim bilgisine dayalı öneri olarak belirt. Zamanlamada Gaziantep iklimini ve bayram/okul dönemlerini hesaba kat.
 
 Yalnızca şu JSON'u döndür:
 {{"urun": "takımın kısa tanımı", "renkler": ["görünen renkler"],
@@ -74,7 +77,7 @@ def analiz_et(foto_bytes, baglam=None):
             ADRES.format(model=model), data=govde, method="POST",
             headers={"Content-Type": "application/json", "x-goog-api-key": anahtar})
         try:
-            with urllib.request.urlopen(istek, timeout=90) as r:
+            with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
                 veri = json.load(r)
             metin = veri["candidates"][0]["content"]["parts"][0]["text"]
             s = json.loads(metin)
@@ -112,7 +115,7 @@ def etiket_oku(foto_bytes):
             ADRES.format(model=model), data=govde, method="POST",
             headers={"Content-Type": "application/json", "x-goog-api-key": anahtar})
         try:
-            with urllib.request.urlopen(istek, timeout=60) as r:
+            with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
                 veri = json.load(r)
             o = json.loads(veri["candidates"][0]["content"]["parts"][0]["text"])
             return {"marka": str(o.get("marka") or "").strip()[:40], "model_kodu": str(o.get("model_kodu") or "").strip()[:30]}

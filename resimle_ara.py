@@ -5,11 +5,13 @@ Bulamadığı bilgiyi None bırakır; rakam uydurmaz.
 """
 import json
 import os
+import statistics
 import urllib.error
 import urllib.parse
 import urllib.request
 
 SERPAPI_URL = "https://serpapi.com/search.json"
+ZAMAN_ASIMI = 20  # saniye
 
 
 def _sahte():
@@ -39,52 +41,51 @@ def _bos(hata):
     }
 
 
+def _tl_mi(fiyat):
+    """Fiyat Türk lirası mı? SerpApi 'currency' (₺/TRY/TL) ya da 'value' yazısına bakar; emin değilse hayır."""
+    birim = str(fiyat.get("currency") or "").strip().upper()
+    if birim in ("₺", "TRY", "TL"):
+        return True
+    if birim:
+        return False
+    yazi = str(fiyat.get("value") or "").upper()
+    return "₺" in yazi or "TL" in yazi or "TRY" in yazi
+
+
 def ara(foto_bytes, analiz, foto_url=None, firma="", kategori="", model=""):
+    """Her raporda SerpApi'ye yalnızca 1 sorgu atar (Google Lens, visual_matches)."""
     anahtar = os.getenv("SERPAPI_KEY")
     if not anahtar or not foto_url or "localhost" in foto_url or "127.0.0.1" in foto_url:
         return _sahte()
     metin = " ".join(x for x in (firma, model, kategori if kategori != "diğer" else "") if x).strip()
-
-    def sorgula(tur, firma_ile=True):
-        parametre = {
-            "engine": "google_lens", "url": foto_url, "type": tur,
-            "hl": "tr", "country": "tr", "api_key": anahtar,
-        }
-        if metin and firma_ile:
-            parametre["q"] = metin  # firma + kategori: Lens aramasını doğru ürüne yönlendirir
-        sorgu = urllib.parse.urlencode(parametre)
+    parametre = {
+        "engine": "google_lens", "url": foto_url, "type": "visual_matches",
+        "hl": "tr", "country": "tr", "api_key": anahtar,
+    }
+    if metin:
+        parametre["q"] = metin  # firma + model + kategori: Lens aramasını doğru ürüne yönlendirir
+    try:
+        with urllib.request.urlopen(f"{SERPAPI_URL}?{urllib.parse.urlencode(parametre)}", timeout=ZAMAN_ASIMI) as r:
+            veri = json.load(r)
+    except urllib.error.HTTPError as e:
         try:
-            with urllib.request.urlopen(f"{SERPAPI_URL}?{sorgu}", timeout=60) as r:
-                return json.load(r)
-        except urllib.error.HTTPError as e:
-            try:
-                mesaj = json.load(e).get("error")
-            except Exception:
-                mesaj = None
-            return {"error": f"HTTP {e.code}" + (f": {mesaj}" if mesaj else "")}
+            mesaj = json.load(e).get("error")
+        except Exception:
+            mesaj = None
+        return _bos("Arama servisi hata verdi: HTTP " + str(e.code) + (f": {mesaj}" if mesaj else ""))
+    except Exception as e:  # ağ hatası / zaman aşımı
+        return _bos(f"Arama servisine ulaşılamadı ({type(e).__name__}).")
+    if veri.get("error"):
+        return _bos(f"Arama servisi hata verdi: {veri['error']}")
 
-    eslesmeler, veri, denenen, hatalar = [], {}, [], []
-    for tur in ("visual_matches", "exact_matches"):  # Google'ın şu an desteklediği modlar
-        try:
-            veri = sorgula(tur)
-            if metin and (veri.get("error") or not (veri.get("visual_matches") or veri.get("exact_matches"))):
-                veri = sorgula(tur, firma_ile=False)  # yazıyla sonuç gelmediyse yalnızca fotoğrafla dene
-        except Exception as e:  # ağ hatası
-            hatalar.append(f"{tur}: {type(e).__name__}")
-            continue
-        if veri.get("error"):
-            hatalar.append(f"{tur}: {veri['error']}")
-            continue
-        denenen.append(tur)
-        eslesmeler = veri.get("visual_matches") or veri.get("exact_matches") or []
-        if eslesmeler:
-            break
-    if not eslesmeler and hatalar and not denenen:
-        return _bos("Arama servisi hata verdi: " + " | ".join(hatalar))
-
-    liste = []
+    eslesmeler = veri.get("visual_matches") or []
+    liste, doviz = [], 0
     for e in eslesmeler:
-        fiyat = (e.get("price") or {}).get("extracted_value")
+        p = e.get("price") or {}
+        fiyat = p.get("extracted_value")
+        if isinstance(fiyat, (int, float)) and fiyat > 0 and not _tl_mi(p):
+            doviz += 1
+            fiyat = None  # döviz fiyatı kullanılmaz
         yorum = e.get("reviews")
         puan = e.get("rating")
         liste.append({
@@ -100,11 +101,11 @@ def ara(foto_bytes, analiz, foto_url=None, firma="", kategori="", model=""):
     en_ucuz = sorted((x for x in liste if x["fiyat"] is not None), key=lambda x: x["fiyat"])[:5]
     en_yorumlu = sorted((x for x in liste if x["yorum"]), key=lambda x: -x["yorum"])[:5]
     if eslesmeler:
-        durum = f"Google Lens arandı ({denenen[-1]}), {len(eslesmeler)} eşleşme geldi."
+        durum = f"Google Lens arandı, {len(eslesmeler)} eşleşme geldi."
+        if doviz:
+            durum += f" {doviz} döviz fiyatı hesaba katılmadı."
     else:
-        durum = ("Google Lens arandı (" + ", ".join(denenen) + ") ama eşleşme gelmedi. "
-                 "Servisin cevabındaki başlıklar: " + ", ".join(sorted(veri.keys()))
-                 + (" | Hatalar: " + " | ".join(hatalar) if hatalar else ""))
+        durum = "Google Lens arandı ama eşleşme gelmedi."
     return {
         "sahte": False,
         "durum": durum,
@@ -112,28 +113,8 @@ def ara(foto_bytes, analiz, foto_url=None, firma="", kategori="", model=""):
         "benzer_sayisi": len(eslesmeler) if eslesmeler else None,
         "fiyat_min": fiyatlar[0] if fiyatlar else None,
         "fiyat_max": fiyatlar[-1] if fiyatlar else None,
-        "fiyat_medyan": fiyatlar[len(fiyatlar) // 2] if fiyatlar else None,
+        "fiyat_medyan": statistics.median(fiyatlar) if fiyatlar else None,
         "ilgi": None,  # bu servis satış/ilgi verisi vermez; yorum sayısı varsa listede gösterilir
         "en_ucuz": en_ucuz,
         "en_yorumlu": en_yorumlu,
     }
-
-
-def yazi_ara(sorgu):
-    """Marka + model kodunu Google'da yazıyla arar (SerpApi). Anahtar ya da sorgu yoksa boş liste döner."""
-    anahtar = os.getenv("SERPAPI_KEY")
-    if not anahtar or not sorgu.strip():
-        return []
-    q = urllib.parse.urlencode({"engine": "google", "q": sorgu, "hl": "tr", "gl": "tr", "num": 8, "api_key": anahtar})
-    try:
-        with urllib.request.urlopen(f"{SERPAPI_URL}?{q}", timeout=60) as r:
-            veri = json.load(r)
-    except Exception:
-        return []
-    cikti = []
-    for o in (veri.get("organic_results") or [])[:6]:
-        link = o.get("link")
-        if isinstance(link, str) and link.startswith("http"):
-            cikti.append({"baslik": o.get("title") or "bulamadım", "site": o.get("source") or o.get("displayed_link") or "",
-                          "link": link, "ozet": o.get("snippet") or ""})
-    return cikti

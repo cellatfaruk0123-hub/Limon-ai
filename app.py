@@ -1,3 +1,4 @@
+import hmac
 import os
 import uuid
 
@@ -14,9 +15,22 @@ app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
 GECICI = {}
 
 
+def _pin():
+    return (os.getenv("APP_PIN") or "").strip()
+
+
 @app.get("/")
 def anasayfa():
-    return render_template("index.html")
+    return render_template("index.html", pin_gerekli=bool(_pin()))
+
+
+@app.post("/pin")
+def pin_kontrol():
+    pin = _pin()
+    gelen = (request.headers.get("X-App-Pin") or request.form.get("pin") or "").strip()
+    if pin and not hmac.compare_digest(gelen.encode(), pin.encode()):
+        return jsonify(hata="Şifre yanlış."), 401
+    return jsonify(tamam=True)
 
 
 def _sayi(deger):
@@ -36,6 +50,10 @@ def gecici(kimlik):
 
 @app.post("/rapor")
 def rapor_hazirla():
+    pin = _pin()
+    gelen = (request.headers.get("X-App-Pin") or request.form.get("pin") or "").strip()
+    if pin and not hmac.compare_digest(gelen.encode(), pin.encode()):
+        return jsonify(hata="Şifre yanlış.", pin=True), 401
     foto = request.files.get("foto")
     alis = _sayi(request.form.get("alis"))
     adet = _sayi(request.form.get("adet"))
@@ -58,6 +76,7 @@ def rapor_hazirla():
             firma=(request.form.get("firma") or "").strip()[:60],
             kategori=(request.form.get("kategori") or "").strip()[:40],
             model_kodu=(request.form.get("model") or "").strip()[:30],
+            seri=(request.form.get("seri") or "").strip()[:20],
         )
     finally:
         GECICI.pop(kimlik, None)

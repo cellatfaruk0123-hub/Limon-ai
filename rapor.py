@@ -1,10 +1,13 @@
 """Raporu birleştirir. Kâr hesabı her zaman gerçek; arama ve yorum anahtarlar varsa gerçek, yoksa sahte."""
 import datetime
+import urllib.parse
 
 import foto_analiz
 import resimle_ara
 
 KDV = 0.10
+TY_KOMISYON = 0.20  # Trendyol varsayımı: satış fiyatının %20'si
+TY_KARGO = 100.0   # Trendyol varsayımı: adet başı kargo (TL)
 
 
 def _tl(x):
@@ -21,11 +24,17 @@ def kar_hesapla(alis, kdv_dahil, adet, satis):
         onerildi = True
     satis_hariç = satis / (1 + KDV)
     adet_kar = satis_hariç - alis_hariç
+    satis_kdv = satis - satis_hariç
+    alis_kdv = alis_hariç * KDV
+    ty_kar = satis_hariç - satis * TY_KOMISYON - TY_KARGO - alis_hariç
     return {
         "satis": satis,
         "onerildi": onerildi,
         "alis_hariç": alis_hariç,
-        "odenecek_kdv": satis - satis_hariç,
+        "odenecek_kdv": satis_kdv,
+        "net_kdv": satis_kdv - alis_kdv,
+        "toptanci_nakit": alis_hariç * (1 + KDV) * adet,
+        "ty_adet_kar": ty_kar,
         "adet_kar": adet_kar,
         "toplam_kar": adet_kar * adet,
         "kar_orani": (adet_kar / alis_hariç * 100) if alis_hariç else None,
@@ -56,7 +65,7 @@ def _web_ozet(web):
     return "; ".join(parca) + ". Satış sayısı: bulamadım."
 
 
-def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firma="", kategori="", model_kodu=""):
+def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firma="", kategori="", model_kodu="", seri=""):
     kar = kar_hesapla(alis, kdv_dahil, adet, satis)
     okunan = {}
     if not (firma and model_kodu):  # eksik olanı etiketten oku
@@ -64,12 +73,10 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
     firma_son = firma or okunan.get("marka", "")
     model_son = model_kodu or okunan.get("model_kodu", "")
     web = resimle_ara.ara(foto_bytes, None, foto_url, firma_son, kategori, model_son)
-    yazi_sorgu = " ".join(x for x in (firma_son, model_son, kategori if kategori != "diğer" else "") if x)
-    yazi = resimle_ara.yazi_ara(yazi_sorgu) if (firma_son or model_son) else []
     analiz = foto_analiz.analiz_et(foto_bytes, {
         "alis_haric": kar["alis_hariç"], "adet": adet, "kumas": kumas, "satis": kar["satis"],
         "kar_orani": kar["kar_orani"] or 0, "ay": datetime.date.today().month,
-        "web_ozet": _web_ozet(web), "firma": firma_son, "kategori": kategori,
+        "web_ozet": _web_ozet(web), "firma": firma_son, "kategori": kategori, "seri": seri,
     })
 
     uyarilar = []
@@ -99,6 +106,29 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
     else:
         ust = None
 
+    # Trendyol / Google Alışveriş arama düğmeleri (ücretsiz, yeni sekmede açılır)
+    if firma_son or model_son:
+        sorgu = " ".join(x for x in (firma_son, model_son, kategori if kategori != "diğer" else "") if x)
+    else:
+        kelimeler = [] if analiz.get("sahte") else (analiz.get("arama_kelimeleri") or [])
+        sorgu = kelimeler[0] if kelimeler else (kategori if kategori != "diğer" else "çocuk takımı")
+    q = urllib.parse.quote_plus(sorgu)
+    dugmeler = {
+        "sorgu": sorgu,
+        "trendyol": f"https://www.trendyol.com/sr?q={q}",
+        "google": f"https://www.google.com/search?tbm=shop&hl=tr&gl=tr&q={q}",
+    }
+
+    medyan = web.get("fiyat_medyan")
+    if medyan:
+        fark = (kar["satis"] - medyan) / medyan * 100
+        if abs(fark) < 0.5:
+            piyasa = "Satış fiyatın piyasa ortancasıyla aynı."
+        else:
+            piyasa = f"Satış fiyatın piyasa ortancasından %{abs(fark):.0f} {'pahalı' if fark > 0 else 'ucuz'} ({_tl(medyan)})."
+    else:
+        piyasa = "Piyasa ortancası: bulamadım."
+
     etiket = analiz.get("karar", "bulamadım")
     renk = {"Al": "yesil", "Az al": "sari", "Alma": "kirmizi"}.get(etiket, "sari")
     return {
@@ -115,8 +145,7 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
             "urun": analiz.get("urun") or "bulamadım",
             "arama_kelimeleri": analiz.get("arama_kelimeleri") or [],
             "okunan": {"marka": firma_son, "model_kodu": model_son, "yazidan": bool(okunan.get("marka") or okunan.get("model_kodu"))},
-            "yazi_sorgu": yazi_sorgu,
-            "yazi_sonuc": yazi,
+            "dugmeler": dugmeler,
             "en_ucuz": [_urun(o) for o in web.get("en_ucuz", [])],
             "en_yorumlu": [_urun(o) for o in web.get("en_yorumlu", [])],
         },
@@ -124,6 +153,11 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
             "satis": _tl(kar["satis"]) + (" (program önerdi)" if kar["onerildi"] else ""),
             "alis_hariç": _tl(kar["alis_hariç"]),
             "odenecek_kdv": _tl(kar["odenecek_kdv"]),
+            "net_kdv": _tl(kar["net_kdv"]),
+            "toptanci_nakit": _tl(kar["toptanci_nakit"]),
+            "piyasa": piyasa,
+            "trendyol": (f"Trendyol'da satarsak (%{TY_KOMISYON * 100:.0f} komisyon + {TY_KARGO:.0f} TL kargo varsayımıyla) "
+                         f"adet başı tahmini net kâr: {_tl(kar['ty_adet_kar'])}"),
             "adet_kar": _tl(kar["adet_kar"]),
             "toplam_kar": _tl(kar["toplam_kar"]),
             "kar_orani": f"%{kar['kar_orani']:.0f}" if kar["kar_orani"] is not None else "bulamadım",
