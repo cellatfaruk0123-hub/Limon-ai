@@ -80,8 +80,8 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
     })
 
     uyarilar = []
-    if not web.get("birebir_bulundu"):
-        uyarilar.append("İnternette birebir aynı modeli bulamadım; aşağıdakiler yalnızca benzer ürünlerdir.")
+    if not web.get("benzer_sayisi"):
+        uyarilar.append("İnternette bu ürüne benzeyen ürün bulamadım.")
     for h in (web.get("hata"), analiz.get("hata")):
         if h:
             uyarilar.append(h)

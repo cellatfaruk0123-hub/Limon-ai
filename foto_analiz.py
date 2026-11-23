@@ -6,11 +6,17 @@ Model adı değişebildiği için sırayla birkaç model denenir; GEMINI_MODEL i
 import base64
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
-MODELLER = ["gemini-2.5-flash", "gemini-flash-latest"]
-ZAMAN_ASIMI = 20  # saniye
+MODELLER = ["gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+ZAMAN_ASIMI = 20  # saniye, tek istek
+GECICI_HATA = (429, 503)  # yoğunluk: 2 sn bekle, aynı modeli 1 kez daha dene
+ANAHTAR_HATA = (401, 403)  # geçersiz anahtar: diğer modeller de aynısını verir, dur
+# Render isteği 120 sn'de keser; Gemini denemeleri toplamda bu süreyi geçmesin.
+SURE_ANALIZ = 55
+SURE_ETIKET = 25
 ADRES = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
@@ -92,6 +98,41 @@ Yalnızca şu JSON'u döndür:
  "zamanlama": "ne zaman satışa çıkmalı"}}"""
 
 
+def _gemini(govde, anahtar, sure):
+    """Modelleri sırayla dener; başarılı cevabın JSON'unu döndürür. Hepsi olmazsa (None, hatalar)."""
+    modeller = ([os.getenv("GEMINI_MODEL")] if os.getenv("GEMINI_MODEL") else []) + MODELLER
+    son = time.monotonic() + sure
+    hatalar = []
+    for model in modeller:
+        for deneme in (1, 2):
+            if time.monotonic() > son:
+                hatalar.append("süre doldu")
+                return None, hatalar
+            istek = urllib.request.Request(
+                ADRES.format(model=model), data=govde, method="POST",
+                headers={"Content-Type": "application/json", "x-goog-api-key": anahtar})
+            try:
+                with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
+                    return _yanit_oku(json.load(r)), hatalar
+            except urllib.error.HTTPError as e:
+                hatalar.append(f"{model}: HTTP {e.code}")
+                if e.code in ANAHTAR_HATA:
+                    return None, hatalar  # anahtar geçersiz/yetkisiz
+                if e.code in GECICI_HATA and deneme == 1:
+                    time.sleep(2)
+                    continue  # aynı modeli 1 kez daha dene
+                break  # sıradaki modele geç
+            except ValueError as e:  # güvenlik filtresi / boş / bozuk cevap
+                hatalar.append(f"{model}: {e}")
+                if "güvenlik" in str(e):
+                    return None, hatalar  # başka model de aynı fotoğrafı engeller
+                break
+            except Exception as e:  # ağ hatası / zaman aşımı
+                hatalar.append(f"{model}: {type(e).__name__}")
+                break
+    return None, hatalar
+
+
 def analiz_et(foto_bytes, baglam=None):
     anahtar = os.getenv("GEMINI_API_KEY")
     if not anahtar or not baglam:
@@ -103,30 +144,12 @@ def analiz_et(foto_bytes, baglam=None):
         ]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.3},
     }).encode()
-    modeller = ([os.getenv("GEMINI_MODEL")] if os.getenv("GEMINI_MODEL") else []) + MODELLER
-    hatalar = []
-    for model in modeller:
-        istek = urllib.request.Request(
-            ADRES.format(model=model), data=govde, method="POST",
-            headers={"Content-Type": "application/json", "x-goog-api-key": anahtar})
-        try:
-            with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
-                veri = json.load(r)
-            s = _yanit_oku(veri)
-            s["sahte"] = False
-            if s.get("karar") not in ("Al", "Az al", "Alma"):
-                s["karar"] = "bulamadım"
-            return s
-        except urllib.error.HTTPError as e:
-            hatalar.append(f"{model}: HTTP {e.code}")
-            if e.code not in (400, 404):  # anahtar/kota sorunu: diğer modeller de aynısını verir
-                break
-        except ValueError as e:  # güvenlik filtresi / boş / bozuk cevap: aynı modelde tekrar denemeye değmez
-            hatalar.append(f"{model}: {e}")
-            if "güvenlik" in str(e):
-                break
-        except Exception as e:
-            hatalar.append(f"{model}: {type(e).__name__}")
+    s, hatalar = _gemini(govde, anahtar, SURE_ANALIZ)
+    if s is not None:
+        s["sahte"] = False
+        if s.get("karar") not in ("Al", "Az al", "Alma"):
+            s["karar"] = "bulamadım"
+        return s
     return _sahte("Fotoğraf yorumu alınamadı (" + " | ".join(hatalar) + ").")
 
 
@@ -145,19 +168,7 @@ def etiket_oku(foto_bytes):
         ]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
     }).encode()
-    modeller = ([os.getenv("GEMINI_MODEL")] if os.getenv("GEMINI_MODEL") else []) + MODELLER
-    for model in modeller:
-        istek = urllib.request.Request(
-            ADRES.format(model=model), data=govde, method="POST",
-            headers={"Content-Type": "application/json", "x-goog-api-key": anahtar})
-        try:
-            with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
-                veri = json.load(r)
-            o = _yanit_oku(veri)
-            return {"marka": str(o.get("marka") or "").strip()[:40], "model_kodu": str(o.get("model_kodu") or "").strip()[:30]}
-        except urllib.error.HTTPError as e:
-            if e.code not in (400, 404):
-                break
-        except Exception:
-            continue
+    o, _ = _gemini(govde, anahtar, SURE_ETIKET)
+    if o:
+        return {"marka": str(o.get("marka") or "").strip()[:40], "model_kodu": str(o.get("model_kodu") or "").strip()[:30]}
     return {}
