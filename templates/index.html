@@ -152,6 +152,7 @@ function goster(d) {
     <div style="margin-top:6px">Aranan marka/model: <b>${kac([b.okunan.marka, b.okunan.model_kodu].filter(Boolean).join(' ') || 'bulamadım')}</b>${b.okunan.yazidan ? ' <small>(fotoğraftan okundu)</small>' : ''}</div>
     <div class="dugmeler"><a class="dugme" href="${kac(b.dugmeler.trendyol)}" target="_blank" rel="noopener">Trendyol'da Ara</a><a class="dugme g" href="${kac(b.dugmeler.google)}" target="_blank" rel="noopener">Google Alışveriş'te Ara</a></div>
     <small>Aranacak: ${kac(b.dugmeler.sorgu)}</small>
+    ${liste('En çok benzeyen 5', b.en_benzer || [], 'Benzeyen ürün bulamadım.')}
     ${liste('En ucuz 5', b.en_ucuz, 'Fiyatlı benzer ürün bulamadım.')}
     ${liste('En çok yorum alan 5', b.en_yorumlu, 'Yorum bilgisi olan ürün bulamadım.')}</div>`;
   const k = d.kar;

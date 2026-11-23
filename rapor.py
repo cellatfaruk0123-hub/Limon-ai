@@ -152,6 +152,7 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
             "arama_kelimeleri": analiz.get("arama_kelimeleri") or [],
             "okunan": {"marka": firma_son, "model_kodu": model_son, "yazidan": bool(okunan.get("marka") or okunan.get("model_kodu"))},
             "dugmeler": dugmeler,
+            "en_benzer": [_urun(o) for o in web.get("en_benzer", [])],
             "en_ucuz": [_urun(o) for o in web.get("en_ucuz", [])],
             "en_yorumlu": [_urun(o) for o in web.get("en_yorumlu", [])],
         },
