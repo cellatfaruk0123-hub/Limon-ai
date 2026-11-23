@@ -53,17 +53,17 @@ def _tl_mi(fiyat):
 
 
 def ara(foto_bytes, analiz, foto_url=None, firma="", kategori="", model=""):
-    """Her raporda SerpApi'ye yalnızca 1 sorgu atar (Google Lens, visual_matches)."""
+    """Her raporda SerpApi'ye yalnızca 1 sorgu atar (Google Lens, visual_matches, sadece fotoğrafla).
+
+    firma/kategori/model bilerek aramaya eklenmez: toptancı markaları internette geçmediği için
+    yazı eklemek görsel eşleşmeyi bozuyor."""
     anahtar = os.getenv("SERPAPI_KEY")
     if not anahtar or not foto_url or "localhost" in foto_url or "127.0.0.1" in foto_url:
         return _sahte()
-    metin = " ".join(x for x in (firma, model, kategori if kategori != "diğer" else "") if x).strip()
     parametre = {
         "engine": "google_lens", "url": foto_url, "type": "visual_matches",
         "hl": "tr", "country": "tr", "api_key": anahtar,
     }
-    if metin:
-        parametre["q"] = metin  # firma + model + kategori: Lens aramasını doğru ürüne yönlendirir
     try:
         with urllib.request.urlopen(f"{SERPAPI_URL}?{urllib.parse.urlencode(parametre)}", timeout=ZAMAN_ASIMI) as r:
             veri = json.load(r)

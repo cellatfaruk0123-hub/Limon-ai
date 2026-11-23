@@ -106,12 +106,18 @@ def hazirla(foto_bytes, alis, kdv_dahil, adet, kumas, satis, foto_url=None, firm
     else:
         ust = None
 
-    # Trendyol / Google Alışveriş arama düğmeleri (ücretsiz, yeni sekmede açılır)
-    if firma_son or model_son:
+    # Trendyol / Google Alışveriş arama düğmeleri (ücretsiz, yeni sekmede açılır).
+    # Önce Gemini'nin baskı/yazı/figürden ürettiği trendyol_sorgu; yoksa marka/model; o da yoksa kategori.
+    ty = "" if analiz.get("sahte") else str(analiz.get("trendyol_sorgu") or "").strip()[:100]
+    kelimeler = [] if analiz.get("sahte") else (analiz.get("arama_kelimeleri") or [])
+    if ty:
+        sorgu = ty
+    elif firma_son or model_son:
         sorgu = " ".join(x for x in (firma_son, model_son, kategori if kategori != "diğer" else "") if x)
+    elif kelimeler:
+        sorgu = str(kelimeler[0])
     else:
-        kelimeler = [] if analiz.get("sahte") else (analiz.get("arama_kelimeleri") or [])
-        sorgu = kelimeler[0] if kelimeler else (kategori if kategori != "diğer" else "çocuk takımı")
+        sorgu = kategori if kategori and kategori != "diğer" else "çocuk takımı"
     q = urllib.parse.quote_plus(sorgu)
     dugmeler = {
         "sorgu": sorgu,

@@ -49,7 +49,8 @@ def _sahte(hata=None):
         "sahte": True,
         "urun": "Çocuk takımı (örnek)",
         "renkler": ["pembe", "krem"],
-        "arama_kelimeleri": ["çocuk takım"],
+        "trendyol_sorgu": "Trendyol'da birebir bu ürünü bulacak 1 kısa arama cümlesi",
+ "arama_kelimeleri": ["çocuk takım"],
         "karar": "Az al",
         "karar_gerekce": "Örnek karar: benzer ürünler var, ilgi orta.",
         "ihtimal": "orta (örnek)",
@@ -78,6 +79,8 @@ Ekteki fotoğraf toptancıda görülen bir çocuk takımı. Bilgiler:
 
 KESİN KURALLAR: Verilmeyen hiçbir rakamı uydurma. İnternet özetinde olmayan satış sayısı, ilgi ya da fiyat için "bulamadım" yaz.
 Karar; fotoğraf, kumaş, mevsim, kâr oranı ve internet özetine dayansın, gerekçede hangisine dayandığını söyle.
+Takımın üzerindeki baskıyı, figürü ve İngilizce/Türkçe yazıyı (örn. "New York", ayıcık, fiyonk) dikkatle oku.
+Bunlarla Trendyol'da birebir bu ürünü bulacak en net 1 kısa arama cümlesi üret (trendyol_sorgu): cinsiyet + ürün tipi + baskı/yazı/figür + belirgin renk, en fazla 6-7 kelime. Görmediğin yazıyı uydurma.
 Beden ve renk önerisini seçilen yaş serisine ve genel çocuk giyim bilgisine dayalı öneri olarak belirt. Zamanlamada Gaziantep iklimini ve bayram/okul dönemlerini hesaba kat.
 
 Yalnızca şu JSON'u döndür:
