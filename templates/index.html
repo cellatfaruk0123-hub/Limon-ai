@@ -121,13 +121,13 @@ $('#foto').onchange = e => {
 };
 $('#form').onsubmit = async e => {
   e.preventDefault(); $('#hata').textContent = ''; $('#rapor').innerHTML = '';
-  const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Hazırlanıyor…';
+  const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Hazırlanıyor… (İlk açılış 30-45 sn sürebilir)';
   try {
     const fd = new FormData(e.target);
     const dosya = $('#foto').files[0];
     if (dosya) fd.set('foto', await kucult(dosya), 'foto.jpg');
     const r = await fetch('/rapor', {method:'POST', body:fd, headers:{'X-App-Pin': pinAl()}});
-    const d = await r.json();
+    let d; try { d = await r.json(); } catch { d = {hata: `Sunucu hatası (${r.status}), tekrar deneyin.`}; }
     if (r.status === 401) { pinYaz(''); kilitAc(); $('#hata').textContent = d.hata || 'Şifre gerekli.'; return; }
     if (!r.ok) { $('#hata').textContent = d.hata || 'Bir sorun oldu.'; return; }
     goster(d);

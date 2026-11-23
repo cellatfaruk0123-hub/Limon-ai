@@ -40,6 +40,16 @@ def _sayi(deger):
         return None
 
 
+@app.errorhandler(413)
+def cok_buyuk(_):
+    return jsonify(hata="Fotoğraf çok büyük (en fazla 15 MB). Daha küçük bir fotoğraf seçin."), 413
+
+
+@app.errorhandler(500)
+def sunucu_hatasi(_):
+    return jsonify(hata="Sunucuda bir hata oldu, lütfen tekrar deneyin."), 500
+
+
 @app.get("/gecici/<kimlik>")
 def gecici(kimlik):
     foto = GECICI.get(kimlik)

@@ -14,6 +14,36 @@ ZAMAN_ASIMI = 20  # saniye
 ADRES = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
+def _yanit_oku(veri):
+    """Gemini cevabından JSON'u güvenle çıkarır. Okuyamazsa ValueError (anlamlı mesajla) atar."""
+    engel = (veri.get("promptFeedback") or {}).get("blockReason")
+    if engel:
+        raise ValueError(f"Gemini fotoğrafı güvenlik filtresine takıldı ({engel})")
+    adaylar = veri.get("candidates") or []
+    if not adaylar:
+        raise ValueError("Gemini boş cevap verdi")
+    aday = adaylar[0]
+    parcalar = (aday.get("content") or {}).get("parts") or []
+    metin = "".join(p.get("text", "") for p in parcalar if isinstance(p, dict)).strip()
+    if not metin:
+        neden = aday.get("finishReason") or "bilinmiyor"
+        if neden in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "RECITATION"):
+            raise ValueError(f"Gemini cevabı güvenlik filtresine takıldı ({neden})")
+        raise ValueError(f"Gemini yazı döndürmedi ({neden})")
+    if metin.startswith("```"):  # ```json ... ``` bloğunu temizle
+        metin = metin.split("\n", 1)[1] if "\n" in metin else metin[3:]
+        if metin.rstrip().endswith("```"):
+            metin = metin.rstrip()[:-3]
+        metin = metin.strip()
+    try:
+        sonuc = json.loads(metin)
+    except json.JSONDecodeError:
+        raise ValueError("Gemini cevabı okunamadı (JSON bozuk)")
+    if not isinstance(sonuc, dict):
+        raise ValueError("Gemini cevabı beklenen biçimde değil")
+    return sonuc
+
+
 def _sahte(hata=None):
     s = {
         "sahte": True,
@@ -79,8 +109,7 @@ def analiz_et(foto_bytes, baglam=None):
         try:
             with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
                 veri = json.load(r)
-            metin = veri["candidates"][0]["content"]["parts"][0]["text"]
-            s = json.loads(metin)
+            s = _yanit_oku(veri)
             s["sahte"] = False
             if s.get("karar") not in ("Al", "Az al", "Alma"):
                 s["karar"] = "bulamadım"
@@ -88,6 +117,10 @@ def analiz_et(foto_bytes, baglam=None):
         except urllib.error.HTTPError as e:
             hatalar.append(f"{model}: HTTP {e.code}")
             if e.code not in (400, 404):  # anahtar/kota sorunu: diğer modeller de aynısını verir
+                break
+        except ValueError as e:  # güvenlik filtresi / boş / bozuk cevap: aynı modelde tekrar denemeye değmez
+            hatalar.append(f"{model}: {e}")
+            if "güvenlik" in str(e):
                 break
         except Exception as e:
             hatalar.append(f"{model}: {type(e).__name__}")
@@ -117,7 +150,7 @@ def etiket_oku(foto_bytes):
         try:
             with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
                 veri = json.load(r)
-            o = json.loads(veri["candidates"][0]["content"]["parts"][0]["text"])
+            o = _yanit_oku(veri)
             return {"marka": str(o.get("marka") or "").strip()[:40], "model_kodu": str(o.get("model_kodu") or "").strip()[:30]}
         except urllib.error.HTTPError as e:
             if e.code not in (400, 404):
